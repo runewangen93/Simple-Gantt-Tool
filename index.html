@@ -123,6 +123,28 @@ button.yay{animation:yay .5s}
 #help>div{overflow:hidden;min-height:0}
 #help ul{margin:0;padding:4px 14px 12px 32px;color:var(--mut);font-size:13px;line-height:1.75}
 #help b{color:var(--fg);font-weight:600}
+:root{--ms:#f5a524;--mh:38px}
+.tr.hdtr{background-image:linear-gradient(90deg,transparent 50%,var(--alt) 50%);background-size:calc(var(--cw)*8) 100%}
+.bar{z-index:1}
+.row.mrow{height:var(--mh)}
+.mrow .nm{background-image:none;color:var(--mut);font-size:12px;font-weight:600}
+.mrow .nm::before{content:"";flex:none;width:9px;height:9px;margin-right:9px;background:var(--ms);transform:rotate(45deg);border-radius:2px}
+.ms{position:absolute;top:0;height:100%;width:var(--cw);cursor:grab;touch-action:none;z-index:1}
+.ms.on{cursor:grabbing}
+.dia{position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;background:var(--ms);border-radius:3px;transform:rotate(45deg);box-shadow:0 0 0 2px var(--bg),0 2px 6px #0004;transition:transform .15s,box-shadow .15s}
+.ms.hov .dia,.ms.on .dia{transform:rotate(45deg) scale(1.3);box-shadow:0 0 0 2px var(--bg),0 0 14px 2px #f5a52499}
+.mt{position:absolute;left:calc(50% + 15px);top:50%;transform:translateY(-50%);font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:var(--mw,120px)}
+.ms.edit{z-index:5}
+.mi{position:absolute;left:calc(50% + 15px);top:50%;transform:translateY(-50%);width:130px;font-size:13px;background:var(--bg);border:1px solid var(--ms);border-radius:6px;padding:3px 6px;outline:0}
+.md{position:absolute;left:calc(50% + 150px);top:50%;transform:translateY(-50%);width:24px;height:24px;padding:0;border-radius:50%;background:var(--head);color:var(--fg);line-height:1;font-size:15px}
+.mlines{position:absolute;left:var(--nw);top:44px;pointer-events:none;z-index:0}
+.mline{position:absolute;top:0;bottom:0;width:0;border-left:1.5px dashed #f5a52499}
+@keyframes diaIn{0%{transform:rotate(45deg) scale(0)}60%{transform:rotate(45deg) scale(1.7)}100%{transform:rotate(45deg) scale(1)}}
+.ms.new .dia{animation:diaIn .5s cubic-bezier(.2,.9,.3,1)}
+#selbar{position:fixed;left:50%;bottom:calc(58px + env(safe-area-inset-bottom,0px));transform:translate(-50%,16px);display:flex;align-items:center;gap:8px;padding:7px 7px 7px 16px;background:var(--bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 10px 30px #0004;font-size:13px;opacity:0;pointer-events:none;transition:.22s cubic-bezier(.2,.9,.3,1.2);z-index:30}
+#selbar.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#selbar button{padding:6px 14px;border-radius:999px}
+#seldel{color:#e5484d}
 </style>
 </head>
 <body>
@@ -147,10 +169,13 @@ button.yay{animation:yay .5s}
 <div id="sc"><div id="in"></div></div>
 <div id="sum"></div>
 
+<div id="selbar"><span id="selct"></span><button class="g" id="seldel">Delete</button><button class="g" id="selclr">Done</button></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 const DAY=864e5, CW=56;
 const $=id=>document.getElementById(id);
+(()=>{const o=Element.prototype.setPointerCapture;Element.prototype.setPointerCapture=function(id){try{o.call(this,id)}catch(e){}}})();
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const toast=m=>{let t=$("toast");if(!t){t=document.createElement("div");t.id="toast";document.body.appendChild(t)}t.textContent=m;t.className="show";clearTimeout(t._h);t._h=setTimeout(()=>{t.className=""},3800)};
 window.alert=toast;
 const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -165,6 +190,7 @@ const m0=monday(new Date());
 let S={title:"",start:iso(new Date(m0.getFullYear(),m0.getMonth(),1)),end:iso(new Date(m0.getFullYear(),m0.getMonth()+2,1)),next:4,tasks:[
  {id:1,name:"Plan",hue:215,segs:[{s:0,l:2}]},{id:2,name:"Build",hue:355,segs:[{s:2,l:3}]},{id:3,name:"Launch",hue:140,segs:[{s:5,l:2}]}]};
 try{const v=localStorage.getItem("gantt1");if(v){const o=JSON.parse(v);if(ok(o.start)&&ok(o.end)){o.tasks.forEach(t=>{if(!t.segs)t.segs=[{s:t.s,l:t.l}]});S=Object.assign({title:""},o)}}}catch(e){}
+if(!Array.isArray(S.ms))S.ms=[];
 const save=()=>{try{localStorage.setItem("gantt1",JSON.stringify(S))}catch(e){}};
 const mi=s=>{const d=parse(s);return d.getFullYear()*12+d.getMonth()};
 const nWeeks=()=>Math.min(36,Math.max(1,mi(S.end)-mi(S.start)+1))*4;
@@ -179,10 +205,10 @@ function fitNames(){
   document.documentElement.style.setProperty("--nw",Math.round(Math.min(max,Math.max(base,w+76)))+"px");
 }
 addEventListener("resize",fitNames);
-let fresh=null,freshRow=null,moved=null;
+let fresh=null,freshRow=null,moved=null,msFresh=null,editMs=null,rendering=false;
 let sel=new Set(),suppress=false;
-const applySel=()=>{document.querySelectorAll(".bar").forEach(b=>b.classList.toggle("sel",sel.has(b._g)));if(sel.size)document.querySelectorAll(".ghost.show").forEach(g=>g.classList.remove("show"))};
-document.addEventListener("animationend",e=>{if(e.animationName==="born"||e.animationName==="rowIn"||e.animationName==="landed")e.target.classList.remove("new","newrow","moved")});
+const applySel=()=>{document.querySelectorAll(".bar").forEach(b=>b.classList.toggle("sel",sel.has(b._g)));if(sel.size)document.querySelectorAll(".ghost.show").forEach(g=>g.classList.remove("show"));const sb=$("selbar");if(sb){sb.classList.toggle("show",sel.size>0);$("selct").textContent=sel.size+" selected"}};
+document.addEventListener("animationend",e=>{if(e.animationName==="born"||e.animationName==="rowIn"||e.animationName==="landed")e.target.classList.remove("new","newrow","moved");if(e.animationName==="diaIn"&&e.target.parentElement)e.target.parentElement.classList.remove("new")});
 let lastH=0,hl=null;
 const buzz=n=>{
   try{if(navigator.vibrate){navigator.vibrate(n);return}}catch(e){}
@@ -192,14 +218,22 @@ const buzz=n=>{
 function flash(el,c){["pop","tick","bump","yay"].forEach(x=>el.classList.remove(x));void el.offsetWidth;el.classList.add(c);setTimeout(()=>el.classList.remove(c),700)}
 
 function render(){
+  rendering=true;
   const n=nWeeks(),w=n*CW;
   sel=new Set([...sel].filter(x=>S.tasks.some(t=>t.segs.includes(x))));
   S.tasks.forEach(t=>{t.segs=t.segs.filter(g=>g.s<n);t.segs.forEach(g=>{g.l=Math.max(1,Math.min(n-g.s,g.l))})});
   $("ti").value=S.title||"";
   if(document.activeElement!==$("s"))$("s").value=fmt(S.start);
   if(document.activeElement!==$("e"))$("e").value=fmt(S.end);
-  let h=`<div class="row hd"><div class="nm"></div><div class="tr" style="width:${w}px">`,pm=-1;
+  let h=`<div class="row hd"><div class="nm"></div><div class="tr hdtr" style="width:${w}px">`,pm=-1;
   for(let j=0;j<n/4;j++){const[mn,yr]=monLabel(j);h+=`<div class="mo" style="left:${j*4*CW}px;width:${4*CW}px">${mn}&nbsp;<span>${yr}</span></div>`}
+  h+="</div></div>";
+  h+=`<div class="row mrow"><div class="nm">Milestones</div><div class="tr mtr" style="width:${w}px">`;
+  S.ms.forEach((m,i)=>{
+    if(m.w>=n)return;
+    const nx=S.ms.slice(i+1).find(o=>o.w<n),mw=Math.max(30,((nx?nx.w:n)-m.w)*CW-34),ed=m===editMs;
+    h+=`<div class="ms${m===msFresh?" new":""}${ed?" edit":""}" data-i="${i}" style="left:${m.w*CW}px;--mw:${mw}px"><i class="dia"></i>${ed?`<input class="mi" value="${esc(m.label)}" placeholder="Milestone" maxlength="40"><button class="md" aria-label="Delete milestone">×</button>`:`<span class="mt">${esc(m.label)}</span>`}</div>`;
+  });
   h+="</div></div>";
   S.tasks.forEach(t=>{
     h+=`<div class="row${t===freshRow?" newrow":""}${t===moved?" moved":""}" data-id="${t.id}"><div class="nm" style="--tc:${hsl(t.hue,68,52,.16)}"><span class="gr" title="Drag to reorder"></span><input placeholder="Task" aria-label="Task name"><button class="x" aria-label="Delete">×</button></div><div class="tr" style="width:${w}px;background-color:${hsl(t.hue,68,52,.045)}">`;
@@ -207,8 +241,9 @@ function render(){
     h+="</div></div>";
   });
   h+=`<div class="addrow"><button class="g" id="add">+ Task</button></div>`;
+  h+=`<div class="mlines" style="width:${w}px;height:calc(var(--mh) + ${S.tasks.length}*var(--rh))">${S.ms.map((m,i)=>m.w<n?`<i class="mline" data-i="${i}" style="left:${(m.w+.5)*CW}px"></i>`:"").join("")}</div>`;
   $("in").style.minWidth="calc(var(--nw) + "+w+"px)";
-  fitNames();$("in").innerHTML=h;fresh=freshRow=moved=null;$("add").onclick=addTask;updSum();
+  fitNames();$("in").innerHTML=h;fresh=freshRow=moved=msFresh=null;$("add").onclick=addTask;updSum();applySel();bindMs(n);rendering=false;
   document.querySelectorAll(".row[data-id]").forEach(r=>{
     const t=S.tasks.find(x=>x.id==r.dataset.id),inp=r.querySelector("input"),tr=r.querySelector(".tr");
     inp.value=t.name;
@@ -272,7 +307,7 @@ function render(){
       const ng={s:wk,l:1};t.segs.push(ng);t.segs.sort((a,b)=>a.s-b.s);fresh=ng;buzz(7);save();render();
     };
     tr.querySelectorAll(".bar").forEach(bar=>{
-      const idx=+bar.dataset.i,g=t.segs[idx];bar._g=g;bar._t=t;
+      const idx=+bar.dataset.i,g=t.segs[idx];bar._g=g;bar._t=t;bar.addEventListener("dblclick",()=>removeSeg(t,g,bar));
       bar.onpointerdown=e=>{
         if(e.shiftKey||e.ctrlKey||e.metaKey){e.preventDefault();sel.has(g)?sel.delete(g):sel.add(g);applySel();return}
         if(sel.has(g)&&sel.size>1&&!e.target.classList.contains("h")){groupDrag(e,bar,g,n);return}
@@ -296,8 +331,8 @@ function render(){
           bar.onpointermove=bar.onpointerup=bar.onpointercancel=null;bar.classList.remove("on");
           if(s===s0&&l===l0){
             const now=Date.now();
-            if(lastTap.g===g&&now-lastTap.t<400){lastTap={};bar.classList.add("out");buzz(8);setTimeout(()=>{t.segs.splice(t.segs.indexOf(g),1);save();render()},180);return}
-            lastTap={g,t:now};return;
+            if(lastTap.g===g&&now-lastTap.t<650){removeSeg(t,g,bar);return}
+            sel=new Set([g]);applySel();lastTap={g,t:now};return;
           }
           g.s=s;g.l=l;lastTap={};save();flash(bar,"pop");buzz(7);
         };
@@ -357,7 +392,7 @@ document.addEventListener("keydown",e=>{
   else if(e.key==="Delete"||e.key==="Backspace"){S.tasks.forEach(t=>{t.segs=t.segs.filter(g=>!sel.has(g))});sel.clear();buzz(8);save();render()}
 });
 $("sc").addEventListener("touchmove",e=>{if(document.querySelector(".mq"))e.preventDefault()},{passive:false});
-const HOVSEL=".bar,.row[data-id],button,.gr,.h,input";
+const HOVSEL=".bar,.row[data-id],button,.gr,.h,input,.ms";
 let hovSet=new Set();
 function setHover(list){hovSet.forEach(el=>{if(!list.has(el))el.classList.remove("hov")});list.forEach(el=>el.classList.add("hov"));hovSet=list}
 document.addEventListener("pointerover",e=>{
@@ -374,6 +409,46 @@ $("ex").onclick=e=>{e.stopPropagation();$("mn").classList.toggle("open")};
 $("mn").addEventListener("click",()=>$("mn").classList.remove("open"));
 document.addEventListener("click",e=>{if(!e.target.closest(".dd"))$("mn").classList.remove("open")});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){$("mn").classList.remove("open");$("help").classList.remove("open");$("hp").classList.remove("on")}});
+function removeSeg(t,g,bar){
+  if(bar.classList.contains("out"))return;
+  lastTap={};bar.classList.add("out");buzz(8);
+  setTimeout(()=>{const i=t.segs.indexOf(g);if(i>=0)t.segs.splice(i,1);sel.delete(g);save();render()},180);
+}
+function deleteSel(){S.tasks.forEach(t=>{t.segs=t.segs.filter(g=>!sel.has(g))});sel.clear();buzz(8);save();render()}
+$("seldel").onclick=deleteSel;$("selclr").onclick=()=>{sel.clear();applySel()};
+function bindMs(n){
+  const mtr=document.querySelector(".mtr");if(!mtr)return;
+  mtr.onclick=e=>{
+    if(e.target!==mtr)return;
+    const wk=Math.floor((e.clientX-mtr.getBoundingClientRect().left)/CW);
+    if(wk<0||wk>=n||S.ms.some(m=>m.w===wk))return;
+    const nm={w:wk,label:""};S.ms.push(nm);S.ms.sort((a,b)=>a.w-b.w);msFresh=nm;editMs=nm;buzz(7);save();render();
+  };
+  mtr.querySelectorAll(".ms").forEach(el=>{
+    const m=S.ms[+el.dataset.i],line=document.querySelector('.mline[data-i="'+el.dataset.i+'"]');
+    if(el.classList.contains("edit")){
+      const inp=el.querySelector("input"),done=()=>{if(rendering||!S.ms.includes(m))return;m.label=inp.value.trim();editMs=null;save();render()};
+      inp.onblur=done;inp.onkeydown=ev=>{if(ev.key==="Enter"||ev.key==="Escape")inp.blur()};
+      el.querySelector(".md").onpointerdown=ev=>{ev.preventDefault();ev.stopPropagation();S.ms=S.ms.filter(o=>o!==m);editMs=null;buzz(8);save();render()};
+      return;
+    }
+    el.onpointerdown=e=>{
+      e.preventDefault();el.setPointerCapture(e.pointerId);
+      const x0=e.clientX,w0=m.w;let w=w0,mv=false;el.classList.add("on");buzz(3);
+      el.onpointermove=ev=>{
+        if(Math.abs(ev.clientX-x0)>4)mv=true;
+        const nw=Math.max(0,Math.min(n-1,w0+Math.round((ev.clientX-x0)/CW)));
+        if(nw!==w&&!S.ms.some(o=>o!==m&&o.w===nw)){w=nw;el.style.left=w*CW+"px";if(line)line.style.left=(w+.5)*CW+"px";buzz(4)}
+      };
+      el.onpointerup=el.onpointercancel=()=>{
+        el.onpointermove=el.onpointerup=el.onpointercancel=null;el.classList.remove("on");
+        if(!mv){editMs=m;render();return}
+        m.w=w;S.ms.sort((a,b)=>a.w-b.w);msFresh=m;save();render();
+      };
+    };
+  });
+  if(editMs){const inp=document.querySelector(".ms.edit input");if(inp){inp.focus();inp.select()}}
+}
 function showText(text,msg){
   const old=$("ov");if(old)old.remove();
   const d=document.createElement("div");d.id="ov";
@@ -399,7 +474,7 @@ function importData(str){
     if(!o||!Array.isArray(o.tasks)||!re.test(o.start)||!re.test(o.end)||!ok(o.start)||!ok(o.end))throw 0;
     let id=0;
     const tasks=o.tasks.map(t=>({id:++id,name:String(t.name||""),hue:Number(t.hue)||0,segs:(Array.isArray(t.segs)?t.segs:[]).map(g=>({s:Math.max(0,Math.floor(+g.s)||0),l:Math.max(1,Math.floor(+g.l)||1)})).sort((a,b)=>a.s-b.s)}));
-    S={title:String(o.title||""),start:o.start,end:o.end,next:id+1,tasks};
+    S={title:String(o.title||""),start:o.start,end:o.end,next:id+1,tasks,ms:(Array.isArray(o.ms)?o.ms:[]).map(m=>({w:Math.max(0,Math.floor(+m.w)||0),label:String(m.label||"")}))};editMs=null;
     save();render();flash($("ex"),"yay");return true;
   }catch(err){toast("That doesn't look like saved Gantt data.");return false}
 }
@@ -430,7 +505,7 @@ bindDate("s","start");bindDate("e","end");
 function rgb(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return[f(0),f(8),f(4)].map(x=>Math.round(x*255))}
 $("pdf").onclick=async()=>{
   if(!window.jspdf){alert("PDF library did not load.");return}
-  const n=nWeeks(),HH=36,RH=28,TH=S.title?30:0,R=Math.max(1,S.tasks.length)*RH,H=TH+HH+R;
+  const n=nWeeks(),HH=S.ms.some(m=>m.w<n)?60:36,RH=28,TH=S.title?30:0,R=Math.max(1,S.tasks.length)*RH,H=TH+HH+R;
   const doc=new window.jspdf.jsPDF({orientation:"landscape",unit:"pt",format:"a4"});
   const pw=doc.internal.pageSize.getWidth(),ph=doc.internal.pageSize.getHeight(),m=28;
   doc.setFontSize(10);const NW=Math.min(300,Math.max(110,Math.ceil(Math.max(0,...S.tasks.map(t=>doc.getTextWidth(t.name||"")))+16)));
@@ -452,10 +527,21 @@ $("pdf").onclick=async()=>{
   doc.setFontSize(9*k);
   for(let i=0;i<n;i++){
     const x=X(NW+i*C);
-    doc.setDrawColor(...LN);doc.line(x,Y(0),x,Y(HH+R));
-    if(i%4===0){const[mn,yr]=monLabel(i/4);doc.setTextColor(...FG);doc.text(mn+" "+yr,x+6*k,Y(HH/2+3))}
+    doc.setDrawColor(...LN);doc.line(x,Y(HH),x,Y(HH+R));
+    if(i%4===0){const[mn,yr]=monLabel(i/4);doc.setTextColor(...FG);doc.text(mn+" "+yr,x+6*k,Y(21))}
     
   }
+  doc.setDrawColor(150,105,30);doc.setLineWidth(.8);doc.setLineDashPattern([3*k,3*k],0);
+  S.ms.forEach(m=>{if(m.w<n){const cx=X(NW+(m.w+.5)*C);doc.line(cx,Y(HH),cx,Y(HH+R))}});
+  doc.setLineDashPattern([],0);doc.setLineWidth(.6);
+  S.ms.forEach((m,i)=>{
+    if(m.w>=n)return;
+    const cx=X(NW+(m.w+.5)*C),cy=Y(HH-13),r=5.5*k,nx=S.ms.slice(i+1).find(o=>o.w<n),room=((nx?nx.w:n)-m.w)*C*k-r*2-6*k;
+    doc.setFillColor(245,165,36);doc.lines([[r,r],[-r,r],[-r,-r],[r,-r]],cx,cy-r,[1,1],"F",true);
+    let t=m.label||"";doc.setFontSize(8*k);doc.setTextColor(...FG);
+    if(doc.getTextWidth(t)>room){while(t.length>1&&doc.getTextWidth(t+"..")>room)t=t.slice(0,-1);t+=".."}
+    if(room>10*k)doc.text(t,cx+r+4*k,cy+2.8*k);
+  });
   doc.setFontSize(10*k);
   S.tasks.forEach((t,i)=>{
     const y=HH+i*RH;
