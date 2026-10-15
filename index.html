@@ -615,12 +615,24 @@ bindDate("s","start");bindDate("e","end");
 function rgb(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return[f(0),f(8),f(4)].map(x=>Math.round(x*255))}
 $("pdf").onclick=async()=>{
   if(!window.jspdf){alert("PDF library did not load.");return}
-  const n=nWeeks(),HH=S.ms.some(m=>m.w<n)?60:36,RH=28,TH=S.title?30:0,R=Math.max(1,S.tasks.length)*RH,H=TH+HH+R;
+  const n=nWeeks(),RH=28,TH=S.title?30:0,R=Math.max(1,S.tasks.length)*RH;let HH=36;
   const doc=new window.jspdf.jsPDF({orientation:"landscape",unit:"pt",format:"a4"});
   const pw=doc.internal.pageSize.getWidth(),ph=doc.internal.pageSize.getHeight(),m=28;
   doc.setFontSize(10);const NW=Math.min(300,Math.max(110,Math.ceil(Math.max(0,...S.tasks.map(t=>doc.getTextWidth(t.name||"")))+16)));
-  let k=Math.min(1.5,(ph-2*m)/H),C=Math.min(70,((pw-2*m)/k-NW)/n);
-  if(C<12){C=12;k=(pw-2*m)/(NW+n*C)}
+  // milestone labels: full text, placed on as many lanes as needed so nothing overlaps
+  const vis=S.ms.filter(q=>q.w<n);doc.setFontSize(8);const lw=vis.map(q=>doc.getTextWidth(q.label||""));
+  const place=Cw=>{const occ=[];const res=vis.map((q,i)=>{
+    const cx=NW+(q.w+.5)*Cw,rr=5.5,w=lw[i],right=cx+rr+4+w<=NW+n*Cw,a=(right?cx-rr:cx-rr-4-w)-4,b=(right?cx+rr+4+w:cx+rr)+4;
+    let l=0;while(occ[l]&&occ[l].some(z=>a<z[1]&&b>z[0]))l++;
+    (occ[l]=occ[l]||[]).push([a,b]);return{l,right}});
+    return{res,need:Math.max(1,occ.length)}};
+  let lanesN=1,k,C,lane=[];
+  for(let it=0;it<8;it++){
+    HH=36+(vis.length?lanesN*14+4:0);
+    k=Math.min(1.5,(ph-2*m)/(TH+HH+R));C=Math.min(70,((pw-2*m)/k-NW)/n);
+    if(C<12){C=12;k=(pw-2*m)/(NW+n*C)}
+    const pl=place(C);lane=pl.res;if(pl.need<=lanesN)break;lanesN=pl.need;
+  }
   const W=NW+n*C,X=v=>m+v*k,Y=v=>m+(TH+v)*k,st=Math.ceil(26/C);
   const BG=[23,23,26],HD=[32,32,36],LN=[56,56,62],FG=[240,240,242],MU=[143,143,152];
   const mix=c=>c.map((v,i)=>Math.round(BG[i]*.84+v*.16));
@@ -642,15 +654,13 @@ $("pdf").onclick=async()=>{
     
   }
   doc.setDrawColor(150,105,30);doc.setLineWidth(.8);doc.setLineDashPattern([3*k,3*k],0);
-  S.ms.forEach(m=>{if(m.w<n){const cx=X(NW+(m.w+.5)*C);doc.line(cx,Y(HH),cx,Y(HH+R))}});
+  vis.forEach((q,i)=>{const cx=X(NW+(q.w+.5)*C),cy=Y(HH-4-14*(lane[i].l+.5));doc.line(cx,cy,cx,Y(HH+R))});
   doc.setLineDashPattern([],0);doc.setLineWidth(.6);
-  S.ms.forEach((m,i)=>{
-    if(m.w>=n)return;
-    const cx=X(NW+(m.w+.5)*C),cy=Y(HH-13),r=5.5*k,nx=S.ms.slice(i+1).find(o=>o.w<n),room=((nx?nx.w:n)-m.w)*C*k-r*2-6*k;
-    doc.setFillColor(245,165,36);doc.lines([[r,r],[-r,r],[-r,-r],[r,-r]],cx,cy-r,[1,1],"F",true);
-    let t=m.label||"";doc.setFontSize(8*k);doc.setTextColor(...FG);
-    if(doc.getTextWidth(t)>room){while(t.length>1&&doc.getTextWidth(t+"..")>room)t=t.slice(0,-1);t+=".."}
-    if(room>10*k)doc.text(t,cx+r+4*k,cy+2.8*k);
+  vis.forEach((q,i)=>{
+    const cx=X(NW+(q.w+.5)*C),cy=Y(HH-4-14*(lane[i].l+.5)),rr=5.5*k,w=lw[i]*k,tx=lane[i].right?cx+rr+4*k:cx-rr-4*k-w;
+    if(q.label){doc.setFillColor(...HD);doc.rect(tx-2*k,cy-6*k,w+4*k,12*k,"F")}
+    doc.setFillColor(245,165,36);doc.lines([[rr,rr],[-rr,rr],[-rr,-rr],[rr,-rr]],cx,cy-rr,[1,1],"F",true);
+    if(q.label){doc.setFontSize(8*k);doc.setTextColor(...FG);doc.text(q.label,tx,cy+2.8*k)}
   });
   doc.setFontSize(10*k);
   S.tasks.forEach((t,i)=>{
